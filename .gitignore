@@ -1,0 +1,31 @@
+# Ignore build artifacts
+build/
+dist/
+bin/
+abi/
+bin-debug/
+bin-release/
+out/
+*.swp
+
+# Ignore development environment files
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Ignore compiled contracts
+*.sol.js
+*.sol.js.map
+*.sol.d.ts
+
+# Ignore test coverage reports
+coverage/
+
+# Ignore deployment artifacts
+artifacts/

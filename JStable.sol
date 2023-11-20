@@ -5,10 +5,11 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+
 /*
 * @title JStable
 * @author Jbuilds.dev
-* Collateral: HBAR
+* Collateral: LINK
 * Minting: algorithic
 * Stability: 1 USD
 * This is the ERC token minted to be the stablecoin goverened by the JStable engine contract. 

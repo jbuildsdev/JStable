@@ -22,6 +22,8 @@
 
 //// SPDX-License-Identifier: MIT
 
+//0xCE3634eef24d8c1d897D48250F190b40156e284b
+//000000000000000000
 pragma solidity ^0.8.18;
 
 import {JStable} from "./JStable.sol";
@@ -33,7 +35,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 * @title JStable Engine Contract
 * @author J Builds
 * @dev This is the engine contract that governs the JStable stablecoin.
-*This is an overcollateralized algorithmic stablecoin that uses ETH as collateral. At no point
+*This is an overcollateralized algorithmic stablecoin that uses an ERC20 token as collateral. At no point
  will the value of the collateral be less than the value of the stablecoin.
 * @notice This contract is the core of the J Stable system.
 * It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral/ 
@@ -41,11 +43,12 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 
 
  */
-contract JSTBEngine is ReentrancyGuard {
+contract JSTBEngineToken is ReentrancyGuard {
     ///////////////
     /////Errors///
     //////////////
     error JSTBEngine__NeedsMoreThanZero();
+    error JSTBEngine__TokenNotAllowed();
     error JSTBEngine__TransferFailed();
     error JSTBEngine__BadHealthFactor(uint256 _healthFactor);
     error JSTBEngine__MintFailed();
@@ -57,7 +60,8 @@ contract JSTBEngine is ReentrancyGuard {
 
     mapping(address _user => uint256 collateral) private s_collateralBalances;
     mapping(address _user => uint256 amountJstbMinted) private s_JstbMinted;
-    address private s_priceFeedAddress; //price feed for ETH/USD
+    address private s_collateralTokenAddress;
+    address private s_priceFeedAddress;
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant LIQUIDATION_BONUS = 10; //10% bonus for liquidators
@@ -72,6 +76,12 @@ contract JSTBEngine is ReentrancyGuard {
     ////////////////
     modifier moreThanZero(uint256 _amount) {
         if (_amount == 0) revert JSTBEngine__NeedsMoreThanZero();
+        _;
+    }
+
+    modifier isAllowedToken(address _tokenAddress) {
+        if (_tokenAddress != s_collateralTokenAddress)
+            revert JSTBEngine__TokenNotAllowed();
         _;
     }
 
@@ -90,7 +100,12 @@ contract JSTBEngine is ReentrancyGuard {
     /////FUNCTIONS///
     ////////////////
 
-    constructor(address _priceFeedAddress, address _JSTBaddress) {
+    constructor(
+        address _tokenAddress,
+        address _priceFeedAddress,
+        address _JSTBaddress
+    ) {
+        s_collateralTokenAddress = _tokenAddress;
         s_priceFeedAddress = _priceFeedAddress;
 
         i_JSTB = JStable(_JSTBaddress);
@@ -107,8 +122,11 @@ contract JSTBEngine is ReentrancyGuard {
      * @notice This function will deposit collatral and mint JSTB in one transaction. The amount of collateral deposited must have a greater value than the amount of JSTB minted, as determined by the price feed and the liquidation threshold
      */
 
-    function depositCollateralAndMintJSTB(uint256 _amountJstbToMint) external {
-        depositCollateral{value: msg.value}();
+    function depositCollateralAndMintJSTB(
+        uint256 _amountCollateral,
+        uint256 _amountJstbToMint
+    ) external {
+        depositCollateral(s_collateralTokenAddress, _amountCollateral);
         mintJSTB(_amountJstbToMint);
     }
 
@@ -150,6 +168,7 @@ contract JSTBEngine is ReentrancyGuard {
      * This allows the liquidator to profit from the liquidation by receiving the collateral at a discount to market price.
      * Incentivizing liquidation pegs the coin to 1 USD and keeps the protocol over collateralized.
      * @notice If the price were to gap down the protocol may break and become under collateralized
+     * Therefor only high liquidity tokens should be used as collateral.
      */
     function liquidate(
         address _user,
@@ -159,15 +178,17 @@ contract JSTBEngine is ReentrancyGuard {
             revert JSTBEngine__HealthFactorOK();
         }
 
-        uint256 ethAmountFromDebtToCover = getEthAmountFromUsd(_debtToCover);
+        uint256 tokenAmountFromDebtToCover = getTokenAmountFromUsd(
+            _debtToCover
+        );
 
-        uint256 bonusCollateral = (ethAmountFromDebtToCover *
+        uint256 bonusCollateral = (tokenAmountFromDebtToCover *
             LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
 
         _redeemCollateral(
             _user,
             msg.sender,
-            ethAmountFromDebtToCover + bonusCollateral
+            tokenAmountFromDebtToCover + bonusCollateral
         );
         _burnJSTB(_user, msg.sender, _debtToCover);
     } //TODO: add a treasury address that gets leftover collateral from liquidations
@@ -194,15 +215,30 @@ contract JSTBEngine is ReentrancyGuard {
 
     /**
      * @notice follows CEI pattern
-     * @notice This function receives ETH from the user and updates their collateral balance. This is used to mint JSTB stablecoin
- 
+     * @param _tokenCollateralAddress The address of the collateral token. Must be the same address as the one used to deploy the contract in the constructor
+     * @param _amountCollateral The amount of collateral to deposit
      */
 
-    function depositCollateral() public payable nonReentrant {
-        uint256 amountCollateral = msg.value;
-        require(amountCollateral > 0, "Must deposit more than 0 collateral");
-        s_collateralBalances[msg.sender] += amountCollateral; //add the collateral to the user's balance
-        emit CollateralDesposited(msg.sender, amountCollateral);
+    function depositCollateral(
+        address _tokenCollateralAddress,
+        uint256 _amountCollateral
+    )
+        public
+        moreThanZero(_amountCollateral)
+        isAllowedToken(_tokenCollateralAddress)
+        nonReentrant
+    {
+        s_collateralBalances[msg.sender] += _amountCollateral; //add the collateral to the user's balance
+        emit CollateralDesposited(msg.sender, _amountCollateral);
+        bool success = IERC20(_tokenCollateralAddress).transferFrom(
+            msg.sender,
+            address(this),
+            _amountCollateral
+        ); //transfer the collateral from the user to the contract
+
+        if (!success) {
+            revert JSTBEngine__TransferFailed();
+        }
     }
 
     ///////////////////////////////////////
@@ -213,24 +249,17 @@ contract JSTBEngine is ReentrancyGuard {
      *@param _from The address of the user who's collateral is being redeemed
      *@param _to The address of the user who the collateral is being sent to. This can be the collateral's owner or a liquidator
      *@param _amount The amount of collateral to redeem
-     *TODO: rewrite this to use ETH transfers instead of ERC20 transfers
+     *
      */
 
     function _redeemCollateral(
         address _from,
         address _to,
         uint256 _amount
-    ) private nonReentrant {
-        require(
-            s_collateralBalances[_from] >= _amount,
-            "Insufficient collateral balance"
-        );
-
+    ) private {
         s_collateralBalances[_from] -= _amount;
         emit CollateralRedeemed(_from, _to, _amount);
-
-        // Transfer ETH directly to the recipient
-        (bool success, ) = _to.call{value: _amount}("");
+        bool success = IERC20(s_collateralTokenAddress).transfer(_to, _amount);
         if (!success) {
             revert JSTBEngine__TransferFailed();
         }
@@ -354,7 +383,7 @@ contract JSTBEngine is ReentrancyGuard {
             PRECISION);
     }
 
-    function getEthAmountFromUsd(
+    function getTokenAmountFromUsd(
         uint256 _amountInUsd
     ) public view returns (uint256) {
         AggregatorV3Interface priceFeed = AggregatorV3Interface(

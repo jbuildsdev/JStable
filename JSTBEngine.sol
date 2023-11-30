@@ -102,7 +102,7 @@ contract JSTBEngine is ReentrancyGuard {
 
     /**
      * @notice follows CEI pattern
-     * @param _amountCollateral The amount of collateral to deposit
+
      * @param _amountJstbToMint The amount of JSTB stablecoin to mint
      * @notice This function will deposit collatral and mint JSTB in one transaction. The amount of collateral deposited must have a greater value than the amount of JSTB minted, as determined by the price feed and the liquidation threshold
      */
@@ -286,7 +286,7 @@ contract JSTBEngine is ReentrancyGuard {
      */
     function _healthFactor(
         address _user
-    ) private view returns (uint256 healthFactor) {
+    ) private pure returns (uint256 healthFactor) {
         (
             uint256 totalJstbMinted,
             uint256 collateralValueInUsd

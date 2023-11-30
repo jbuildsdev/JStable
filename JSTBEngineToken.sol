@@ -39,7 +39,7 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
  will the value of the collateral be less than the value of the stablecoin.
 * @notice This contract is the core of the J Stable system.
 * It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral/ 
-
+TODO: create a test contract with a function to set collateral value to test liquidation
 
 
  */
@@ -155,6 +155,8 @@ contract JSTBEngineToken is ReentrancyGuard {
         _revertIfHealthFactorIsBad(msg.sender);
     }
 
+    /**
+    @notice The user must approve a spending cap by calling the approve function on the JStable ERC20 contract in order to burn  */
     function burnJstb(uint256 _amountJstbToBurn) external {
         _burnJSTB(msg.sender, msg.sender, _amountJstbToBurn);
         _revertIfHealthFactorIsBad(msg.sender); //This should never hit since burning JSTB decreases debt and increases health factor
@@ -201,6 +203,7 @@ contract JSTBEngineToken is ReentrancyGuard {
      *
      * @param _amountJstbToMint The amount of JSTB stablecoin to mint
      * @notice The amount of collateral deposited must have a greater value than the amount of JSTB minted
+     * @notice Be aware of ERC20 token precision. In order to mint one JSTB, the _amountJstbToMint parameter must be 1000000000000000000
      */
     function mintJSTB(
         uint256 _amountJstbToMint
@@ -211,7 +214,7 @@ contract JSTBEngineToken is ReentrancyGuard {
         if (!minted) {
             revert JSTBEngine__MintFailed();
         }
-    }
+    } 
 
     /**
      * @notice follows CEI pattern
@@ -333,7 +336,8 @@ contract JSTBEngineToken is ReentrancyGuard {
             (collateralAdjustedForThreshold * PRECISION) /
             _totalJstbMinted;
         return healthFactor;
-    }
+    } //TODO: Fix divide by zero error when user has no collateral
+    //TODO: Token precision is off
 
     //check if health factor is below 1 and revert if it is (Do they have enough collateral to cover their debt?)
     function _revertIfHealthFactorIsBad(address _user) internal view {
@@ -381,7 +385,7 @@ contract JSTBEngineToken is ReentrancyGuard {
         (, int256 price, , , ) = priceFeed.latestRoundData();
         return ((uint256(price) * balance * ADDITIONAL_PRICE_FEED_PRECISION) /
             PRECISION);
-    }
+    } //TODO: This is broken. Returns a massive number when given a small amount of collateral. Not USD. Precision is off somewhere
 
     function getTokenAmountFromUsd(
         uint256 _amountInUsd
@@ -394,8 +398,18 @@ contract JSTBEngineToken is ReentrancyGuard {
             (uint256(price) * ADDITIONAL_PRICE_FEED_PRECISION));
     }
 
-    function getHealthFactor(address user) external view returns (uint256) {
-        return _healthFactor(user);
+    function getUserOverCollateralizationRatio(address _user)
+        external
+        view
+        returns (uint256)
+    {
+        uint256 collateralValueInUsd = getAccountCollateralValueInUsd(_user);
+        uint256 totalJstbMinted = s_JstbMinted[_user];
+        return (collateralValueInUsd * PRECISION) / totalJstbMinted;
+    }//TODO: Test what values this returns. Star debugging here to find source of health factor bug (number too large)
+
+    function getHealthFactor(address _user) external view returns (uint256) {
+        return _healthFactor(_user);
     }
 
     function getMinHealthFactor() external pure returns (uint256) {

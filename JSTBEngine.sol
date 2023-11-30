@@ -36,8 +36,10 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 *This is an overcollateralized algorithmic stablecoin that uses ETH as collateral. At no point
  will the value of the collateral be less than the value of the stablecoin.
 * @notice This contract is the core of the J Stable system.
-* It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral/ 
-
+* It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral
+* TODO: Refactor code to compare health factor to (MIN_HEALTH_FACTOR*PRECISION). Our health factor now works but loses all precision.
+  Health factor should be 1e18 times the actual value to keep precision
+* TODO: Make a test contract with a function to change collateral value to test liquidation
 
 
  */
@@ -107,10 +109,10 @@ contract JSTBEngine is ReentrancyGuard {
      * @notice This function will deposit collatral and mint JSTB in one transaction. The amount of collateral deposited must have a greater value than the amount of JSTB minted, as determined by the price feed and the liquidation threshold
      */
 
-    function depositCollateralAndMintJSTB(uint256 _amountJstbToMint) external {
-        depositCollateral{value: msg.value}();
-        mintJSTB(_amountJstbToMint);
-    }
+    // function depositCollateralAndMintJSTB(uint256 _amountJstbToMint) external {
+    //     depositCollateral();
+    //     mintJSTB(_amountJstbToMint);
+    // }
 
     /**
      * @notice follows CEI pattern
@@ -180,6 +182,7 @@ contract JSTBEngine is ReentrancyGuard {
      *
      * @param _amountJstbToMint The amount of JSTB stablecoin to mint
      * @notice The amount of collateral deposited must have a greater value than the amount of JSTB minted
+     * @notice Be aware of precision. The amount of collateral deposited must be in wei
      */
     function mintJSTB(
         uint256 _amountJstbToMint
@@ -213,7 +216,6 @@ contract JSTBEngine is ReentrancyGuard {
      *@param _from The address of the user who's collateral is being redeemed
      *@param _to The address of the user who the collateral is being sent to. This can be the collateral's owner or a liquidator
      *@param _amount The amount of collateral to redeem
-     *TODO: rewrite this to use ETH transfers instead of ERC20 transfers
      */
 
     function _redeemCollateral(
@@ -286,7 +288,7 @@ contract JSTBEngine is ReentrancyGuard {
      */
     function _healthFactor(
         address _user
-    ) private pure returns (uint256 healthFactor) {
+    ) private view returns (uint256 healthFactor) {
         (
             uint256 totalJstbMinted,
             uint256 collateralValueInUsd
@@ -297,12 +299,14 @@ contract JSTBEngine is ReentrancyGuard {
     function _calculateHealthFactor(
         uint256 _totalJstbMinted,
         uint256 _collateralValueInUsd
-    ) internal view returns (uint256 healthFactor) {
+    ) internal pure returns (uint256 healthFactor) {
+        if (_totalJstbMinted == 0) {
+            // Handle the case where no JSTB has been minted
+            return type(uint256).max; // Return the maximum value for an unsigned integer
+        }
         uint256 collateralAdjustedForThreshold = (_collateralValueInUsd *
             LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
-        healthFactor =
-            (collateralAdjustedForThreshold * PRECISION) /
-            _totalJstbMinted;
+        healthFactor = collateralAdjustedForThreshold / _totalJstbMinted;
         return healthFactor;
     }
 
@@ -321,7 +325,7 @@ contract JSTBEngine is ReentrancyGuard {
     function calculateHealthFactor(
         uint256 _totalJstbMinted,
         uint256 _collateralValueInUsd
-    ) external view returns (uint256 healthFactor) {
+    ) external pure returns (uint256 healthFactor) {
         return _calculateHealthFactor(_totalJstbMinted, _collateralValueInUsd);
     }
 
@@ -352,6 +356,18 @@ contract JSTBEngine is ReentrancyGuard {
         (, int256 price, , , ) = priceFeed.latestRoundData();
         return ((uint256(price) * balance * ADDITIONAL_PRICE_FEED_PRECISION) /
             PRECISION);
+    } //returns a value that is 1e18 times the actual value in USD
+
+    function getUserOverCollateralizationRatio(
+        address _user
+    ) external view returns (uint256) {
+        uint256 collateralValueInUsd = getAccountCollateralValueInUsd(_user);
+        uint256 totalJstbMinted = s_JstbMinted[_user];
+        if (totalJstbMinted == 0) {
+            // Handle the case where no JSTB has been minted
+            return type(uint256).max; // Return the maximum value for an unsigned integer
+        }
+        return (collateralValueInUsd) / totalJstbMinted;
     }
 
     function getEthAmountFromUsd(
@@ -365,8 +381,8 @@ contract JSTBEngine is ReentrancyGuard {
             (uint256(price) * ADDITIONAL_PRICE_FEED_PRECISION));
     }
 
-    function getHealthFactor(address user) external view returns (uint256) {
-        return _healthFactor(user);
+    function getHealthFactor(address _user) external view returns (uint256) {
+        return _healthFactor(_user);
     }
 
     function getMinHealthFactor() external pure returns (uint256) {

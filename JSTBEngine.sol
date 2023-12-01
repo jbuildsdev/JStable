@@ -37,8 +37,6 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
  will the value of the collateral be less than the value of the stablecoin.
 * @notice This contract is the core of the J Stable system.
 * It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral
-* TODO: Refactor code to compare health factor to (MIN_HEALTH_FACTOR*PRECISION). Our health factor now works but loses all precision.
-  Health factor should be 1e18 times the actual value to keep precision
 * TODO: Make a test contract with a function to change collateral value to test liquidation
 
 
@@ -306,14 +304,16 @@ contract JSTBEngine is ReentrancyGuard {
         }
         uint256 collateralAdjustedForThreshold = (_collateralValueInUsd *
             LIQUIDATION_THRESHOLD) / LIQUIDATION_PRECISION;
-        healthFactor = collateralAdjustedForThreshold / _totalJstbMinted;
+        healthFactor =
+            (collateralAdjustedForThreshold * PRECISION) /
+            _totalJstbMinted;
         return healthFactor;
     }
 
     //check if health factor is below 1 and revert if it is (Do they have enough collateral to cover their debt?)
     function _revertIfHealthFactorIsBad(address _user) internal view {
         uint256 userHealthFactor = _healthFactor(_user);
-        if (userHealthFactor < MINIMUM_HEALTH_FACTOR) {
+        if (userHealthFactor < (MINIMUM_HEALTH_FACTOR * PRECISION)) {
             revert JSTBEngine__BadHealthFactor(userHealthFactor);
         }
     }
@@ -367,7 +367,7 @@ contract JSTBEngine is ReentrancyGuard {
             // Handle the case where no JSTB has been minted
             return type(uint256).max; // Return the maximum value for an unsigned integer
         }
-        return (collateralValueInUsd) / totalJstbMinted;
+        return (collateralValueInUsd * PRECISION) / totalJstbMinted;
     }
 
     function getEthAmountFromUsd(

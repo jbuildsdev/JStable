@@ -37,7 +37,6 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
  will the value of the collateral be less than the value of the stablecoin.
 * @notice This contract is the core of the J Stable system.
 * It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral
-* TODO: Make a test contract with a function to change collateral value to test liquidation
 
 
  */
@@ -155,7 +154,7 @@ contract JSTBEngine is ReentrancyGuard {
         address _user,
         uint256 _debtToCover
     ) external moreThanZero(_debtToCover) nonReentrant {
-        if (_healthFactor(_user) >= MINIMUM_HEALTH_FACTOR) {
+        if (_healthFactor(_user) >= (MINIMUM_HEALTH_FACTOR * PRECISION)) {
             revert JSTBEngine__HealthFactorOK();
         }
 

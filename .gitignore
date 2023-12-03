@@ -29,3 +29,7 @@ coverage/
 
 # Ignore deployment artifacts
 artifacts/
+
+# Test artifacts
+JSTBEngineToken.sol
+LiquidationTest.sol

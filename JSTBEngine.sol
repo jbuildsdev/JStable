@@ -171,6 +171,8 @@ contract JSTBEngine is ReentrancyGuard {
         _burnJSTB(_user, msg.sender, _debtToCover);
     } //TODO: add a treasury address that gets leftover collateral from liquidations
 
+    //TODO: This gives a reentrancy error. Major bug. Fix
+
     ///////////////////////////////////////
     /////Public Functions ////////////////
     /////////////////////////////////////

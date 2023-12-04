@@ -56,7 +56,7 @@ contract JSTBEngine is ReentrancyGuard {
 
     mapping(address _user => uint256 collateral) private s_collateralBalances;
     mapping(address _user => uint256 amountJstbMinted) private s_JstbMinted;
-    address private s_priceFeedAddress; //price feed for ETH/USD
+    address private immutable s_priceFeedAddress; //price feed for ETH/USD
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant LIQUIDATION_BONUS = 10; //10% bonus for liquidators

@@ -27,20 +27,13 @@ pragma solidity ^0.8.18;
 import {JStable} from "./JStable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 /** 
-* @title JStable Engine Contract
-* @author J Builds
-* @dev This is the engine contract that governs the JStable stablecoin.
-*This is an overcollateralized algorithmic stablecoin that uses ETH as collateral. At no point
- will the value of the collateral be less than the value of the stablecoin.
-* @notice This contract is the core of the J Stable system.
-* It handles minting and redeeming JSTB, as well as depoisting and withdrawing collateral
-
+This is a test contrat where the value of eth collateral can be set arbitarily. This tests liquidation and minting of JSTB stablecoin 
+with price action of the collateral
 
  */
-contract JSTBEngine is ReentrancyGuard {
+contract LiquidationTest is ReentrancyGuard {
     ///////////////
     /////Errors///
     //////////////
@@ -55,7 +48,7 @@ contract JSTBEngine is ReentrancyGuard {
     ///////////////////
 
     mapping(address _user => uint256 collateral) private s_collateralBalances;
-    mapping(address _user => uint256 amountJstbMinted) private s_JstbMinted;
+    mapping(address _user => uint256 amountJstbMinted) private s_JstbMinted; 
     address private immutable s_priceFeedAddress; //price feed for ETH/USD
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
@@ -63,6 +56,7 @@ contract JSTBEngine is ReentrancyGuard {
     uint256 private constant MINIMUM_HEALTH_FACTOR = 1;
     uint256 private constant ADDITIONAL_PRICE_FEED_PRECISION = 1e10;
     uint256 private constant PRECISION = 1e18;
+    uint private pricefeed;
 
     JStable private i_JSTB;
 
@@ -159,7 +153,6 @@ contract JSTBEngine is ReentrancyGuard {
         }
 
         uint256 ethAmountFromDebtToCover = getEthAmountFromUsd(_debtToCover);
-
         uint256 bonusCollateral = (ethAmountFromDebtToCover *
             LIQUIDATION_BONUS) / LIQUIDATION_PRECISION;
 
@@ -168,8 +161,12 @@ contract JSTBEngine is ReentrancyGuard {
             msg.sender,
             ethAmountFromDebtToCover + bonusCollateral
         );
-        _burnJSTB(_user, msg.sender, _debtToCover);
-    } //TODO: add a treasury address that gets leftover collateral from liquidations
+        _burnJSTB(_user, msg.sender, _debtToCover); 
+    } //TODO: add a treasury address that gets leftover collateral from liquidations. Or maybe send extra back to user? 
+    
+
+    // bug: I managed a small amount of my own position and made my health factor lower? I think this is because I didn't account for the bonus collateral in the liquidation function
+    // bug: I can redeem large amounts of ETH for tiny fraction of JSTB. Must be a precicsion error somewhere. The _debtToCover seems to redeem that many in USD (1e1) but the amount burned in balances is much smaller (1e-18)
 
     ///////////////////////////////////////
     /////Public Functions ////////////////
@@ -349,12 +346,8 @@ contract JSTBEngine is ReentrancyGuard {
     ) public view returns (uint256 collateralValueInUsd) {
         //get the amount of collateral deposited by the user and find its value in USD
         uint256 balance = s_collateralBalances[_user];
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            s_priceFeedAddress
-        );
-        (, int256 price, , , ) = priceFeed.latestRoundData();
-        return ((uint256(price) * balance * ADDITIONAL_PRICE_FEED_PRECISION) /
-            PRECISION);
+
+        return (balance * pricefeed);
     } //returns a value that is 1e18 times the actual value in USD
 
     function getUserOverCollateralizationRatio(
@@ -372,13 +365,8 @@ contract JSTBEngine is ReentrancyGuard {
     function getEthAmountFromUsd(
         uint256 _amountInUsd
     ) public view returns (uint256) {
-        AggregatorV3Interface priceFeed = AggregatorV3Interface(
-            s_priceFeedAddress
-        );
-        (, int256 price, , , ) = priceFeed.latestRoundData();
-        return ((_amountInUsd * PRECISION) /
-            (uint256(price) * ADDITIONAL_PRICE_FEED_PRECISION));
-    }
+        return ((_amountInUsd) / (pricefeed));
+    } // Do not multiply return by precision. The user will send ETH with precision
 
     function getHealthFactor(address _user) external view returns (uint256) {
         return _healthFactor(_user);
@@ -410,5 +398,9 @@ contract JSTBEngine is ReentrancyGuard {
 
     function getAdditionalPriceFeedPrecision() external pure returns (uint256) {
         return ADDITIONAL_PRICE_FEED_PRECISION;
+    }
+
+    function setPricefeed(uint256 _pricefeed) external {
+        pricefeed = _pricefeed;
     }
 }

@@ -28,6 +28,7 @@ import {JStable} from "./JStable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {Treasury} from "./Treasury.sol";
 
 /** 
 * @title JStable Engine Contract
@@ -65,6 +66,7 @@ contract JSTBEngine is ReentrancyGuard {
     uint256 private constant PRECISION = 1e18;
 
     JStable private i_JSTB;
+    Treasury private i_Treasury;
 
     /////////////////
     /////Modifiers///
@@ -89,8 +91,13 @@ contract JSTBEngine is ReentrancyGuard {
     /////FUNCTIONS///
     ////////////////
 
-    constructor(address _priceFeedAddress, address _JSTBaddress) {
+    constructor(
+        address _priceFeedAddress,
+        address _JSTBaddress,
+        address _treasuryAddress
+    ) {
         s_priceFeedAddress = _priceFeedAddress;
+        i_Treasury = Treasury(_treasuryAddress);
 
         i_JSTB = JStable(_JSTBaddress);
     }

@@ -22,8 +22,6 @@
 
 //// SPDX-License-Identifier: MIT
 
-//0xCE3634eef24d8c1d897D48250F190b40156e284b
-//000000000000000000
 pragma solidity ^0.8.18;
 
 import {JStable} from "./JStable.sol";

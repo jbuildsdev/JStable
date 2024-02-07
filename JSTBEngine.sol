@@ -58,6 +58,7 @@ contract JSTBEngine is ReentrancyGuard {
     mapping(address _user => uint256 collateral) private s_collateralBalances;
     mapping(address _user => uint256 amountJstbMinted) private s_JstbMinted;
     address private immutable s_priceFeedAddress; //price feed for ETH/USD
+    address private TreasuryAddress; //address that receives leftover collateral from liquidations
     uint256 private constant LIQUIDATION_THRESHOLD = 50; //200% overcollateralized
     uint256 private constant LIQUIDATION_PRECISION = 100;
     uint256 private constant LIQUIDATION_BONUS = 10; //10% bonus for liquidators
@@ -101,6 +102,7 @@ contract JSTBEngine is ReentrancyGuard {
 
         i_JSTB = JStable(_JSTBaddress);
     }
+
 
     //////////////////////////
     /////External Functions///
@@ -146,6 +148,16 @@ contract JSTBEngine is ReentrancyGuard {
     function burnJstb(uint256 _amountJstbToBurn) external {
         _burnJSTB(msg.sender, msg.sender, _amountJstbToBurn);
         _revertIfHealthFactorIsBad(msg.sender); //This should never hit since burning JSTB decreases debt and increases health factor
+    }
+
+    function sendToTreasury(uint256 _amount) external payable {
+        require(
+            msg.sender == TreasuryAddress,
+            "Only treasury can call this function"
+        );
+
+        (bool success, ) = payable(TreasuryAddress).transfer(_amount);
+        require(success, "Transfer failed");
     }
 
     /**
